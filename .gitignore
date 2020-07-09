@@ -1,0 +1,59 @@
+﻿################################################################################
+# This .gitignore file for Kenny's CTXEngine solution.
+################################################################################
+
+# Visual Studio
+
+*.vcxproj
+*.filters
+*.user
+*.sln
+
+# Visual Studio IntelSence.
+
+*.ipch
+*.db
+*.db-shm
+*.db-wal
+*.opendb
+*.suo
+/.vs/CraftixEngine/v16
+/.vs
+
+# Compile generating files. This files will be generated on compilation.
+
+*.exe
+*.json
+*.ini
+
+# but not ignore
+
+!/Build/bin/premake5.exe
+
+/Build/bin/Debug-windows-x86_64
+/Build/bin/Release-windows-x86_64
+
+# Libraries not be compiled
+
+/CTXEngine/Libraries/glad
+/CTXEngine/Libraries/glfw
+/CTXEngine/Libraries/glm
+/CTXEngine/Libraries/imgui
+/CTXEngine/Libraries/spdlog
+/CTXEngine/Libraries/vk/bin
+/CTXEngine/Libraries/vk/bin-int
+
+# Different / Custom Assets.
+
+/Craftix/Resources/Assets/Geometry Dash
+/Craftix/Resources/Assets/Elements Redux
+/Craftix/Resources/Assets/Foliage Pack
+/Crafiix/Resources/Assets/World Pack/PNG
+/Crafiix/Resources/Assets/World Pack/Spritesheet
+/CTXEditor/Resources/Assets/Geometry Dash
+/CTXEditor/Resources/Assets/Elements Redux
+/CTXEditor/Resources/Assets/Foliage Pack
+/CTXEditor/Resources/Assets/World Pack/PNG
+/CTXEditor/Resources/Assets/World Pack/Spritesheet
+
+
