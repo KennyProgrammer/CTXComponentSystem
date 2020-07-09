@@ -17,7 +17,6 @@ namespace CTXEngine::ECS
 
 		for (uint i = 0; i < this->gameObjects.size(); i++)
 			delete this->gameObjects[i];
-	
 	}
 
 	/*
@@ -38,11 +37,7 @@ namespace CTXEngine::ECS
 			}
 
 			//check if component id is actually valid.
-			ComponentCreateFunc createFunc = BaseComponent::getTypeCreateFunc(componentsIds[i]);
-			std::pair<uint, uint> newPair;
-			newPair.first = componentsIds[i];
-			newPair.second = createFunc(this->components[componentsIds[i]], handle, &components[i]);
-			gameObject->second.push_back(newPair);
+			this->addComponentInternal(handle, gameObject->second, componentsIds[i], &components[i]);
 		}
 
 		gameObject->first = (uint) this->gameObjects.size();
@@ -57,7 +52,7 @@ namespace CTXEngine::ECS
 	{
 		ArrayList<std::pair<uint, uint>>& gameObject = handleGameObject(handle);
 		for (uint i = 0; i < this->gameObjects.size(); i++)
-			this->removeComponentInternal(gameObject[i].first, gameObject[i].second);
+			this->deleteComponent(gameObject[i].first, gameObject[i].second);
 
 		//current index
 		uint destIndex = this->handleGameObjectIndex(handle);
@@ -80,13 +75,44 @@ namespace CTXEngine::ECS
 	/*
 		Remove existing System from memory.
 	*/
-	void ECS::removeSystem(BaseSystem& system)
+	bool ECS::removeSystem(BaseSystem& system)
 	{
-		//auto itr = std::find(systems.begin(), this->systems.end(), system);
-		//if (itr != this->systems.end())
-		//{
-		//	this->systems.erase(itr);
-		//}
+		for (uint i = 0; i < this->systems.size(); i++)
+		{
+			if (&system == this->systems[i])
+			{
+				this->systems.erase(systems.begin() + i);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/*
+		Update all systems with all components in it..
+	*/
+	void ECS::updateSystems(Delta delta)
+	{
+		ArrayList<BaseComponent*> componentParam;
+		ArrayList<ArrayList<uint8>*> componentArrays;
+		for (uint i = 0; i < this->systems.size(); i++)
+		{
+			const ArrayList<uint>& componentTypes = this->systems[i]->getComponentTypes();
+			if (componentTypes.size() == 1)
+			{
+				size_t typeSize = BaseComponent::getTypeSize(componentTypes[0]);
+				ArrayList<uint8>& arr = components[componentTypes[0]];
+				for (uint j = 0; j < arr.size(); j += typeSize)
+				{
+					BaseComponent* component = (BaseComponent*)&arr[j];
+					this->systems[i]->updateComponents(delta, &component);
+				}
+			}
+			else
+			{
+				this->updateSytstemWithMultipieComponents(i, delta, componentTypes, componentParam, componentArrays);
+			}
+		}
 	}
 
 	////////////////////////////////////
@@ -108,8 +134,127 @@ namespace CTXEngine::ECS
 		return this->handleToRawType(handle)->second;
 	}
 
-	void ECS::removeComponentInternal(uint componentId, uint index)
+	void ECS::deleteComponent(uint componentId, uint index)
 	{
+		ArrayList<uint8>& array = this->components[componentId];
+		ComponentDestroyFunc destroyFunc = BaseComponent::getTypeDestroyFunc(componentId);
+		size_t typeSize = BaseComponent::getTypeSize(componentId);
+		uint srcIndex = (uint) (array.size() - typeSize);
 
+		BaseComponent* destComponent = (BaseComponent*) &array[index];
+		BaseComponent* srcComponent =  (BaseComponent*) &array[srcIndex];
+		destroyFunc(destComponent);
+
+		if (index == srcIndex)
+		{
+			array.resize(srcIndex);
+			return;
+		}
+
+		memcpy(destComponent, srcComponent, typeSize);
+		
+		ArrayList<std::pair<uint, uint>>& srcComponents = this->handleGameObject(srcComponent->gameObject);
+		for (uint i = 0; i < srcComponents.size(); i++)
+		{
+			if (componentId == srcComponents[i].first && srcIndex == srcComponents[i].second)
+			{
+				srcComponents[i].first = index;
+				break; 
+			}
+		}
+
+		array.resize(srcIndex);
+	}
+
+	void ECS::addComponentInternal(GameObjectHandle handle, ArrayList<std::pair<uint, uint>>& gameObject, uint componentId, BaseComponent* component)
+	{
+		ComponentCreateFunc createFunc = BaseComponent::getTypeCreateFunc(componentId);
+		std::pair<uint, uint> newPair;
+		newPair.first = componentId;
+		newPair.second = createFunc(this->components[componentId], handle, component);
+		gameObject.push_back(newPair);
+	}
+
+	bool ECS::removeComponentInternal(GameObjectHandle handle, uint componentId)
+	{
+		ArrayList<std::pair<uint, uint>>& gameObjectComponents = this->handleGameObject(handle);
+		for (uint i = 0; i < gameObjectComponents.size(); i++)
+		{
+			if (componentId == gameObjectComponents[i].first)
+			{
+				this->deleteComponent(gameObjectComponents[i].first, gameObjectComponents[i].second);
+				uint srcIndex = (uint) gameObjectComponents.size() - 1;
+				uint destIndex = i;
+				gameObjectComponents[destIndex] = gameObjectComponents[srcIndex];
+				gameObjectComponents.pop_back();
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	BaseComponent* ECS::getComponentInternal(ArrayList<std::pair<uint, uint>>& gameObjectComponents, ArrayList<uint8>& array, uint componentId)
+	{
+		for (uint i = 0; i < gameObjects.size(); i++)
+		{
+			if (componentId == gameObjectComponents[i].first)
+				return (BaseComponent*)&this->components[componentId][gameObjectComponents[i].second];
+		}
+
+		return nullptr;
+	}
+
+	void ECS::updateSytstemWithMultipieComponents(uint index, Delta delta, const ArrayList<uint>& componentTypes, 
+		ArrayList<BaseComponent*>& componentParam, ArrayList<ArrayList<uint8>*>& componentArrays)
+	{
+		componentParam.resize(Math::max(componentParam.size(), componentTypes.size()));
+		componentArrays.resize(Math::max(componentArrays.size(), componentTypes.size()));
+		for (uint32 i = 0; i < componentTypes.size(); i++) 
+			componentArrays[i] = &components[componentTypes[i]];
+		uint32 minSizeIndex = findLeastCommonComponent(componentTypes);
+
+		size_t typeSize = BaseComponent::getTypeSize(componentTypes[minSizeIndex]);
+		ArrayList<uint8>& arr = *componentArrays[componentTypes[minSizeIndex]];
+		for (uint i = 0; i < arr.size(); i += typeSize)
+		{
+			componentParam[minSizeIndex] = (BaseComponent*)&arr[i];
+			ArrayList<std::pair<uint, uint>>& gameObjectComponents = this->handleGameObject(componentParam[minSizeIndex]->gameObject);
+
+			bool isValid = true;
+			for (uint j = 0; j < componentTypes.size(); j++)
+			{
+				if (j == 0) continue;
+
+				componentParam[j] = this->getComponentInternal(gameObjectComponents, *componentArrays[j], componentTypes[j]);
+				if (componentParam[j] == nullptr)
+				{
+					isValid = false;
+					break;
+				}
+			}
+
+			if (isValid)
+				this->systems[index]->updateComponents(delta, &componentParam[0]);
+		}
+	}
+
+	uint32 ECS::findLeastCommonComponent(const ArrayList<uint32>& componentTypes)
+	{
+		uint32 minSize = components[componentTypes[0]].size()
+			/ BaseComponent::getTypeSize(componentTypes[0]);
+		uint32 minIndex = 0;
+		for (uint32 i = 1; i < componentTypes.size(); i++) 
+		{
+			size_t typeSize = BaseComponent::getTypeSize(componentTypes[i]);
+			uint32 size = components[componentTypes[i]].size() / typeSize;
+			if (size < minSize) 
+			{
+				minSize = size;
+				minIndex = i;
+			}
+		}
+
+		return minIndex;
 	}
 }

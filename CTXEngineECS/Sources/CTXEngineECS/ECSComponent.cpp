@@ -10,7 +10,7 @@ namespace CTXEngine::ECS
 	uint BaseComponent::registerComponentType(ComponentCreateFunc createFunc,
 		ComponentDestroyFunc destroyFunc, size_t size)
 	{
-		uint componentId = componentTypes.size();
+		uint componentId = (uint) componentTypes.size();
 		componentTypes.push_back(std::tuple<ComponentCreateFunc, ComponentDestroyFunc, size_t>
 			(createFunc, destroyFunc, size));
 		return componentId;

@@ -4,6 +4,7 @@
 #include "map"
 #include "unordered_map"
 #include "tuple"
+#include "memory"
 
 template<typename T>
 using ArrayList = std::vector<T>;
